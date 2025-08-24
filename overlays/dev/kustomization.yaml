@@ -4,17 +4,17 @@ kind: Kustomization
 namespace: dev
 
 resources:
-  - ../../base
-  - configmap-dev.yaml
-  - secret-dev.yaml
+- ../../base
+- configmap-dev.yaml
+- secret-dev.yaml
 
 images:
-  - name: backend
-    newName: 123456789012.dkr.ecr.ca-central-1.amazonaws.com/touchtunes
-    newTag: ""  # sera remplacé par GitHub Actions
+- name: backend
+  newName: 122610497281.dkr.ecr.ca-central-1.amazonaws.com/touchtunes
+  newTag: dev-6db876af-20250821-182221
 
 patches:
-  - path: replicas-dev.yaml
-  - path: resources-dev.yaml
-  - path: hpa-dev.yaml
-  - path: service-dev.yaml
+- path: replicas-dev.yaml
+- path: resources-dev.yaml
+- path: hpa-dev.yaml
+- path: service-dev.yaml

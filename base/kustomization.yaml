@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default  # valeur générique, sera surchargée par l'overlay
+
+resources:
+  - deployment.yaml
+  - configmap.yaml
+  - secret.yaml
+  - hpa.yaml
+  - service.yaml
+
+images:
+  - name: backend
+    newName: 123456789012.dkr.ecr.ca-central-1.amazonaws.com/touchtunes
+    newTag: latest  # valeur par défaut, sera remplacée par overlays ou CI/CD
+
+patches: []  # vide pour la base, les overlays y mettront leurs patches

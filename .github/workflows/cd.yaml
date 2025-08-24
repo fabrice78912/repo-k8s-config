@@ -1,0 +1,92 @@
+name: Déploiement Multi-Environnement (GitOps via ArgoCD)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environnement à déployer'
+        required: true
+        default: prod
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: "Tag de l’image Docker à déployer (laisser vide = dernier tag)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      IMAGE_REPO: ${{ secrets.IMAGE_REPO }}
+
+    steps:
+      - name: Initialiser variables d'environnement
+        run: |
+          echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> $GITHUB_ENV
+          echo "ENV sélectionné = ${{ github.event.inputs.environment }}"
+          echo "IMAGE_TAG fourni = ${{ github.event.inputs.image_tag }}"
+
+      - name: Configurer AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubActionsECRRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Récupérer le dernier tag ECR si aucun tag fourni
+        if: env.IMAGE_TAG == ''
+        run: |
+          echo "⏳ Aucun tag fourni → récupération du dernier depuis ECR..."
+          LATEST_TAG=$(aws ecr describe-images \
+            --repository-name $IMAGE_REPO \
+            --region $AWS_REGION \
+            --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' \
+            --output text)
+          echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "✅ Tag récupéré : $LATEST_TAG"
+
+      - name: Vérifier la présence de l'image dans ECR
+        run: |
+          echo "🔍 Vérification que l'image $IMAGE_TAG existe bien dans ECR..."
+          aws ecr describe-images \
+            --repository-name $IMAGE_REPO \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region $AWS_REGION
+
+      - name: Checkout repo-k8s-config
+        uses: actions/checkout@v4
+        with:
+          repository: fabrice78912/repo-k8s-config
+          token: ${{ secrets.GH_PAT }} # PAT avec droits d’écriture
+          path: repo-k8s-config
+
+      - name: Vérifier kustomization.yml
+        working-directory: repo-k8s-config
+        run: |
+          ls -la overlays/${{ env.ENV }}/
+
+      - name: Mettre à jour le kustomization avec la nouvelle image
+        working-directory: repo-k8s-config/overlays/${{ env.ENV }}
+        run: |
+          kustomize edit set image backend=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO:$IMAGE_TAG
+          echo "🎯 kustomization mis à jour avec : $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO:$IMAGE_TAG"
+
+      - name: Commit & Push vers repo-k8s-config
+        working-directory: repo-k8s-config
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add overlays/${{ env.ENV }}/kustomization.yaml
+          git commit -m "🚀 Déploiement $IMAGE_REPO:$IMAGE_TAG sur $ENV" || echo "Pas de changements à committer"
+          git push

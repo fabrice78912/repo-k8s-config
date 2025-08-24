@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: default   # valeur générique, remplacée par l’overlay
+data:
+  DB_HOST: "localhost"   # valeur par défaut, peut être surchargée par overlay
+  DB_PORT: "3306"
+  DB_NAME: "test"

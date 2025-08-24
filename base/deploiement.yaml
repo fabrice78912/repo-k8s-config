@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: default       # sera remplacé par l'overlay
+  labels:
+    app: backend
+spec:
+  replicas: 2              # valeur générique, overlay peut la modifier
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - backend
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: backend
+          image: my-backend:latest          # remplacé dynamiquement par kustomize
+          imagePullPolicy: IfNotPresent     # overlay peut changer si besoin
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DB_NAME
+            - name: MYSQL_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: MYSQL_ROOT_USER
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: MYSQL_ROOT_PASSWORD
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: https
+              containerPort: 443
